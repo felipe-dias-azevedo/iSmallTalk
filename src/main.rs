@@ -1,38 +1,42 @@
-mod messages;
-pub mod messenger;
-pub mod local_ip;
-pub mod server;
+mod channel;
+mod messaging;
+mod networking;
 
-use std::sync::{Arc, Mutex};
-use std::{rc::Rc, cell::RefCell};
-use std::thread;
 use std::io::Read;
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::{cell::RefCell, rc::Rc};
 
-use gtk::{prelude::*, gdk::keys::constants::{KP_Enter, ISO_Enter, Return, _3270_Enter}, gio::ApplicationFlags, glib};
+use gtk::{
+    gdk::keys::constants::{ISO_Enter, KP_Enter, Return, _3270_Enter},
+    gio::ApplicationFlags,
+    glib,
+    prelude::*,
+};
 
-use messages::window_info::WindowInfo;
-use messages::chat_info::{ChatInfo, TypeChat};
-use messages::chat_message::ChatMessage;
-use messenger::Messenger;
+use channel::chat_info::{ChatInfo, TypeChat};
+use channel::chat_message::ChatMessage;
+use channel::window_info::WindowInfo;
+use messaging::messenger::Messenger;
 
 fn main() {
-
     let (tx, rx) = glib::MainContext::channel::<WindowInfo>(glib::PRIORITY_DEFAULT);
 
     let actual_text = Rc::new(RefCell::new(String::from("")));
 
-    gtk::init()
-        .expect("GTK failed");
+    gtk::init().expect("GTK failed");
 
-    let app = gtk::Application::new(Some("com.felipe.iSmallTalk"), ApplicationFlags::HANDLES_OPEN);
+    let app = gtk::Application::new(
+        Some("com.felipe.iSmallTalk"),
+        ApplicationFlags::HANDLES_OPEN,
+    );
 
-    let builder = gtk::Builder::from_file("src/windows/ismalltalk-main-3.glade");
-    let window: gtk::Window = builder.object("main-window")
-        .expect("Couldn't set window");
+    let builder = gtk::Builder::from_file("src/windows/ismalltalk-main.glade");
+    let window: gtk::Window = builder.object("main-window").expect("Couldn't set window");
 
     window.show_all();
 
-    window.connect_delete_event(|_,_| {
+    window.connect_delete_event(|_, _| {
         gtk::main_quit();
         Inhibit(false)
     });
@@ -47,27 +51,53 @@ fn main() {
         }
     });
 
-    let hostcheck: gtk::CheckButton = builder.object("main-hostcheck")
+    let hostcheck: gtk::CheckButton = builder
+        .object("main-hostcheck")
         .expect("Couldn't get main-hostcheck");
-        
-    let textview: gtk::TextView = builder.object("main-textview")
+
+    let textview: gtk::TextView = builder
+        .object("main-textview")
         .expect("Couldn't get main-textview");
 
-    let sendbutton: gtk::Button = builder.object("main-sendbutton")
+    let sendbutton: gtk::Button = builder
+        .object("main-sendbutton")
         .expect("Couldn't get main-sendbutton");
 
-    let entrytext: gtk::Entry = builder.object("main-entrytext")
+    let entrytext: gtk::Entry = builder
+        .object("main-entrytext")
         .expect("Couldn't get main-entrytext");
 
-    let leavebutton: gtk::Button = builder.object("main-leavebutton")
+    let leavebutton: gtk::Button = builder
+        .object("main-leavebutton")
         .expect("Couldn't get main-leavebutton");
     leavebutton.hide();
 
-    let addbutton: gtk::Button = builder.object("main-addbutton")
+    let addbutton: gtk::Button = builder
+        .object("main-addbutton")
         .expect("Couldn't get main-addbutton");
 
-    let connectbutton: gtk::Button = builder.object("main-connectbutton")
+    let connectbutton: gtk::Button = builder
+        .object("main-connectbutton")
         .expect("Couldn't get main-connectbutton");
+
+    let menupopover: gtk::Popover = builder
+        .object("main-menupopover")
+        .expect("Couldn't get main-menupopover");
+
+    let aboutbutton: gtk::Button = builder
+        .object("main-aboutbutton")
+        .expect("Couldn't get main-aboutbutton");
+
+    aboutbutton.connect_clicked(move |_| {
+        let aboutdialog: gtk::AboutDialog = builder
+            .object("main-aboutdialog")
+            .expect("Couldn't get main-aboutdialog");
+
+        aboutdialog.show_all();
+        menupopover.hide();
+
+        aboutdialog.connect_delete_event(move |x, _| x.hide_on_delete());
+    });
 
     let is_host = hostcheck.is_active();
     if is_host {
@@ -77,6 +107,8 @@ fn main() {
     }
 
     let (mess, mess_server) = Messenger::new(is_host);
+
+    let id_messenger = mess.get_id();
     let messenger = Rc::new(RefCell::new(mess));
 
     let addbutton_clone = addbutton.clone();
@@ -87,20 +119,6 @@ fn main() {
             connectbutton.hide();
 
             messenger_clone.borrow_mut().change_type(true);
-
-            // let tx_clone = tx.clone();
-            // thread::spawn(move || {
-            //     let mut x = 2f64;
-            //     loop {
-            //         x *= 1.2;
-            //         thread::sleep(Duration::from_millis(x as u64));
-            //         let sent = tx_clone.send(Message::new(String::from("OK?")));
-            //         match sent {
-            //             Ok(_) => println!("Message sent!"),
-            //             Err(err) => println!("ERROR: {}", err)
-            //         }
-            //     }
-            // });
         } else {
             connectbutton.show();
             addbutton_clone.hide();
@@ -130,36 +148,40 @@ fn main() {
         Inhibit(false)
     });
 
-    let buffer_button = buffer.clone();
-    let leavebutton_clone = leavebutton.clone();
+    let tx_clone_sendbutton = tx.clone();
     let actual_text_clone_sendbutton = Rc::clone(&actual_text);
     sendbutton.connect_clicked(move |_| {
-        let (_, mut end) = buffer_button.bounds();
-
         let mut actual_text = actual_text_clone_sendbutton.borrow_mut();
 
         if actual_text.is_empty() {
             return;
         }
 
-        let new_text = format!("<span color='#df0e0f'>{}</span>\n", *actual_text);
-        //entrytext.set_text(""); -> ERROR 'already borrowed: BorrowMutError'
-        *actual_text = String::new();
+        let text = actual_text.clone();
 
-        buffer_button.insert_markup(&mut end, new_text.as_str());
-        leavebutton_clone.show();
+        tx_clone_sendbutton
+            .send(WindowInfo::new_chat_message(
+                ChatMessage::new(&id_messenger, text),
+                true,
+            ))
+            .unwrap();
+
+        // TODO: fix
+        //entrytext.set_text(""); // -> ERROR 'already borrowed: BorrowMutError'
+        *actual_text = String::new();
     });
 
     addbutton.connect_clicked(move |_| {
         let builder = gtk::Builder::from_file("src/windows/template-example-1.ui");
-        let new_window: gtk::Window = builder.object("template-window")
+        let new_window: gtk::Window = builder
+            .object("template-window")
             .expect("Couldn't set window 2");
 
         window.set_accept_focus(false);
         new_window.show_all();
 
         let window_clone = window.clone();
-        new_window.connect_delete_event(move |_,_| {
+        new_window.connect_delete_event(move |_, _| {
             window_clone.set_accept_focus(true);
             Inhibit(false)
         });
@@ -168,41 +190,56 @@ fn main() {
     let server_clone = Arc::clone(&mess_server);
     let tx_server_clone = tx.clone();
     thread::spawn(move || {
-        let server = server_clone.lock()
-            .expect("Couldn't get server...");
+        let server = server_clone.lock().expect("Couldn't get server...");
 
         for client in server.incoming() {
-        
             if client.is_err() {
                 let error = client.as_ref().unwrap_err().to_string();
                 println!("ERROR: {}", error);
-                tx_server_clone.send(WindowInfo::new_chat_info(ChatInfo::new(TypeChat::Error, error), true))
+                tx_server_clone
+                    .send(WindowInfo::new_chat_info(
+                        ChatInfo::new(TypeChat::Error, error),
+                        true,
+                    ))
                     .unwrap();
             }
 
             let client_clone = client;
             let tx_server_clone_thread = tx_server_clone.clone();
-            thread::spawn(move || {
-                loop {
-                    let mut stream = client_clone.as_ref().unwrap();
+            thread::spawn(move || loop {
+                let stream = client_clone.as_ref();
 
-                    let mut buffer = [0; 1024];        
-        
-                    stream.read(&mut buffer)
-                        .expect("Couldn't read from buffer...");
-        
-                    let text = String::from_utf8(Vec::from(&buffer[..])).unwrap();
-        
-                    let text = text.trim_end_matches(char::from(0));
-        
-                    tx_server_clone_thread.send(WindowInfo::new_chat_message(ChatMessage::new(text.to_string()), false))
-                        .unwrap();   
+                if stream.is_err() {
+                    break;
                 }
+
+                let mut stream = client_clone.as_ref().unwrap();
+
+                let mut buffer = [0; 1024];
+
+                stream
+                    .read(&mut buffer)
+                    .expect("Couldn't read from buffer...");
+
+                let text = String::from_utf8(Vec::from(&buffer[..])).unwrap();
+
+                let text = text.trim_end_matches(char::from(0));
+
+                if text.is_empty() {
+                    break;
+                }
+
+                tx_server_clone_thread
+                    .send(WindowInfo::new_chat_message(
+                        ChatMessage::from(text.to_string()),
+                        false,
+                    ))
+                    .unwrap();
             });
         }
     });
 
-     let messenger_clone_rx = Rc::clone(&messenger);
+    let messenger_clone_rx = Rc::clone(&messenger);
     rx.attach(None, move |msg| {
         let (_, mut end) = buffer.bounds();
         let mut messenger = messenger_clone_rx.borrow_mut();

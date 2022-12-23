@@ -1,14 +1,14 @@
-use std::io::{Write, Error};
-use std::net::{TcpListener, TcpStream, IpAddr};
-use std::sync::{Mutex, Arc};
+use std::io::{Error, Write};
+use std::net::{IpAddr, TcpListener, TcpStream};
+use std::sync::{Arc, Mutex};
 
-use crate::local_ip;
-use crate::server;  
+use crate::networking::local_ip;
+use crate::networking::server;
 
 #[derive(PartialEq)]
 pub enum TypeMessenger {
     Host,
-    Client
+    Client,
 }
 
 pub struct Messenger {
@@ -17,36 +17,36 @@ pub struct Messenger {
     pub port: u16,
     //pub server: TcpListener,
     //pub server: Arc<Mutex<TcpListener>>,
-    pub clients: Vec<TcpStream>
+    pub clients: Vec<TcpStream>,
 }
 
 impl Messenger {
     fn get_type_messenger(is_host: bool) -> TypeMessenger {
-
-        if is_host { 
+        if is_host {
             TypeMessenger::Host
-        } else { 
-            TypeMessenger::Client 
+        } else {
+            TypeMessenger::Client
         }
     }
 
     pub fn new(is_host: bool) -> (Self, Arc<Mutex<TcpListener>>) {
-
         let type_messenger = Messenger::get_type_messenger(is_host);
         let ip = local_ip::get();
         let (server, port) = server::bind_ip_port(&ip);
 
-        (Messenger {
-            type_messenger,
-            ip,
-            port,
-            // server: Arc::new(Mutex::new(server)),
-            clients: Vec::new()
-        }, Arc::new(Mutex::new(server)))
+        (
+            Messenger {
+                type_messenger,
+                ip,
+                port,
+                // server: Arc::new(Mutex::new(server)),
+                clients: Vec::new(),
+            },
+            Arc::new(Mutex::new(server)),
+        )
     }
 
     pub fn change_type(&mut self, is_host: bool) {
-        
         self.type_messenger = Messenger::get_type_messenger(is_host);
     }
 
@@ -58,36 +58,35 @@ impl Messenger {
         None
     }
 
-    pub fn connect() {
+    pub fn connect() {}
 
-    }
+    pub fn add_client() {}
 
-    pub fn add_client() {
-
+    pub fn get_id(&self) -> String {
+        format!("{}:{}", self.ip, self.port)
     }
 
     pub fn send_text(&mut self, text: String) -> Vec<Error> {
-        
         self.send(text)
     }
 
     // pub fn send_message(&mut self, message: ChatMessage) -> Vec<Error> {
-        
+
     //     let text = message.to_string();
 
     //     self.send(text)
     // }
 
     // pub fn send_chat(&mut self, chat_info: ChatInfo) -> Vec<Error> {
-        
+
     //     let text = chat_info.to_string();
 
     //     self.send(text)
     // }
 
     fn send(&mut self, text: String) -> Vec<Error> {
-
-        self.clients.iter()
+        self.clients
+            .iter()
             .map(|mut client| client.write(text.as_bytes()))
             .filter_map(|e| e.err())
             .collect()

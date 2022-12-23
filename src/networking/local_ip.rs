@@ -1,4 +1,4 @@
-use std::net::{UdpSocket, IpAddr, Ipv4Addr};
+use std::net::{IpAddr, Ipv4Addr, UdpSocket};
 
 pub fn get_optional() -> Option<IpAddr> {
     let socket = match UdpSocket::bind("0.0.0.0:0") {
@@ -11,9 +11,9 @@ pub fn get_optional() -> Option<IpAddr> {
         Err(_) => return None,
     };
 
-    match socket.local_addr() {
-        Ok(addr) => return Some(addr.ip()),
-        Err(_) => return None,
+    return match socket.local_addr() {
+        Ok(addr) => Some(addr.ip()),
+        Err(_) => None,
     };
 }
 
@@ -21,7 +21,7 @@ pub fn get() -> IpAddr {
     let ip = get_optional();
 
     if ip.is_some() {
-        return ip.unwrap()
+        return ip.unwrap();
     }
 
     IpAddr::V4(Ipv4Addr::LOCALHOST)

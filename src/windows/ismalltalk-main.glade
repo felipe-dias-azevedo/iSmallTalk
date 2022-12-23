@@ -284,7 +284,7 @@
       </object>
     </child>
   </object>
-  <object class="GtkAboutDialog">
+  <object class="GtkAboutDialog" id="main-aboutdialog">
     <property name="can-focus">False</property>
     <property name="modal">True</property>
     <property name="window-position">center-on-parent</property>
