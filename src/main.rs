@@ -3,8 +3,10 @@ mod messaging;
 mod networking;
 
 use std::io::Read;
+use std::net::{SocketAddr, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::Duration;
 use std::{cell::RefCell, rc::Rc};
 
 use gtk::{
@@ -13,7 +15,9 @@ use gtk::{
     glib,
     prelude::*,
 };
+use regex::Regex;
 
+use crate::networking::client;
 use channel::chat_info::{ChatInfo, TypeChat};
 use channel::chat_message::ChatMessage;
 use channel::window_info::WindowInfo;
@@ -72,6 +76,14 @@ fn main() {
         .expect("Couldn't get main-leavebutton");
     leavebutton.hide();
 
+    let statuslabel: gtk::Label = builder
+        .object("main-statuslabel")
+        .expect("Couldn't get main-statuslabel");
+
+    let loaderspinner: gtk::Spinner = builder
+        .object("main-loader")
+        .expect("Couldn't get main-loader");
+
     let addbutton: gtk::Button = builder
         .object("main-addbutton")
         .expect("Couldn't get main-addbutton");
@@ -79,6 +91,7 @@ fn main() {
     let connectbutton: gtk::Button = builder
         .object("main-connectbutton")
         .expect("Couldn't get main-connectbutton");
+    connectbutton.hide();
 
     let menupopover: gtk::Popover = builder
         .object("main-menupopover")
@@ -100,11 +113,12 @@ fn main() {
     });
 
     let is_host = hostcheck.is_active();
-    if is_host {
-        connectbutton.hide();
-    } else {
+    if !is_host {
         addbutton.hide();
     }
+    // else {
+    //     connectbutton.hide();
+    // }
 
     let (mess, mess_server) = Messenger::new(is_host);
 
@@ -116,12 +130,12 @@ fn main() {
     hostcheck.connect_clicked(move |a| {
         if a.is_active() {
             addbutton_clone.show();
-            connectbutton.hide();
+            // connectbutton.hide();
 
             messenger_clone.borrow_mut().change_type(true);
         } else {
-            connectbutton.show();
             addbutton_clone.hide();
+            // connectbutton.show();
 
             messenger_clone.borrow_mut().change_type(false);
         }
@@ -162,7 +176,7 @@ fn main() {
         tx_clone_sendbutton
             .send(WindowInfo::new_chat_message(
                 ChatMessage::new(&id_messenger, text),
-                true,
+                false,
             ))
             .unwrap();
 
@@ -171,14 +185,50 @@ fn main() {
         *actual_text = String::new();
     });
 
+    let statuslabel_clone = statuslabel.clone();
+    let messenger_clone_addclients = Rc::clone(&messenger);
     addbutton.connect_clicked(move |_| {
-        let builder = gtk::Builder::from_file("src/windows/template-example-1.ui");
+        let builder = gtk::Builder::from_file("src/windows/ismalltalk-addclient.ui");
         let new_window: gtk::Window = builder
-            .object("template-window")
-            .expect("Couldn't set window 2");
+            .object("addclient-window")
+            .expect("Couldn't set add client window");
+
+        let addclient_entry: gtk::Entry = builder
+            .object("addclient-entry")
+            .expect("Couldn't set addclient-entry");
+
+        let addclient_button: gtk::Button = builder
+            .object("addclient-button")
+            .expect("Couldn't set addclient-button");
+
+        let addclient_label: gtk::Label = builder
+            .object("addclient-label")
+            .expect("Couldn't set addclient-label");
 
         window.set_accept_focus(false);
         new_window.show_all();
+
+        let statuslabel_clone_button = statuslabel_clone.clone();
+        let messenger_clone_addclients_button = Rc::clone(&messenger_clone_addclients);
+        addclient_button.connect_clicked(move |_| {
+            let clients = &mut messenger_clone_addclients_button.borrow_mut().clients;
+
+            let text = addclient_entry.text();
+            let text = text.as_str();
+
+            let client = client::validate_ip(text);
+
+            if let Some(client_error) = client.as_ref().err() {
+                statuslabel_clone_button.set_text(client_error.0);
+            }
+
+            println!("Client {} connected", text);
+
+            clients.push(client.unwrap());
+            addclient_entry.set_text("");
+            addclient_label.set_text("Username added sucessfully!");
+            statuslabel_clone_button.set_text(format!("{} connected", clients.len()).as_str());
+        });
 
         let window_clone = window.clone();
         new_window.connect_delete_event(move |_, _| {
@@ -232,15 +282,19 @@ fn main() {
                 tx_server_clone_thread
                     .send(WindowInfo::new_chat_message(
                         ChatMessage::from(text.to_string()),
-                        false,
+                        true,
                     ))
                     .unwrap();
             });
         }
     });
 
+    let loaderspinner_clone = loaderspinner.clone();
+    let statuslabel_clone_rx = statuslabel.clone();
     let messenger_clone_rx = Rc::clone(&messenger);
     rx.attach(None, move |msg| {
+        loaderspinner_clone.set_active(true);
+
         let (_, mut end) = buffer.bounds();
         let mut messenger = messenger_clone_rx.borrow_mut();
 
@@ -261,10 +315,15 @@ fn main() {
         }
 
         if let Some(message) = msg.get_chat() {
+            statuslabel_clone_rx
+                .set_text(format!("{} connected", messenger.clients.len()).as_str());
+
             buffer.insert_markup(&mut end, message.as_str());
 
             textview.scroll_to_iter(&mut end, 0.0, false, 0.0, 0.0);
         }
+
+        loaderspinner_clone.set_active(false);
 
         Continue(true)
     });

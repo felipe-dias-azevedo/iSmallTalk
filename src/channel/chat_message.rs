@@ -35,7 +35,8 @@ impl ChatMessage {
 
     pub fn to_string(&self) -> String {
         format!(
-            "<i>{} - {}</i> : <b>{}</b>\n",
+            // "<i>{} - {}</i> : <b>{}</b>\n",
+            "{} - {} : {}\n",
             self.id,
             self.time.format("%d/%m/%Y %T"),
             self.text.to_owned()

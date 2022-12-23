@@ -14,12 +14,12 @@ pub fn bind_ip_port(ip: &IpAddr) -> (TcpListener, u16) {
         let listener = TcpListener::bind(addr);
 
         if listener.is_err() && port_attempt < MAX_IP_PORT {
-            port_attempt += 1;
             println!(
                 "ERROR: Binding IP address failed at {}:{}...",
                 ip.to_string(),
                 port_attempt
             );
+            port_attempt += 1;
             continue;
         }
 

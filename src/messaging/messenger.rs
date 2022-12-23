@@ -67,28 +67,31 @@ impl Messenger {
     }
 
     pub fn send_text(&mut self, text: String) -> Vec<Error> {
-        self.send(text)
+        let mut sends = vec![];
+
+        for i in 0..self.clients.len() {
+            let sent_result = self.clients[i].write(text.as_bytes());
+
+            if sent_result.is_err() {
+                sends.push((i, sent_result.unwrap_err()));
+            }
+        }
+
+        let mut errors = vec![];
+
+        for (corrupted_index, err) in sends {
+            self.clients.remove(corrupted_index);
+            errors.push(err);
+        }
+
+        errors
     }
 
-    // pub fn send_message(&mut self, message: ChatMessage) -> Vec<Error> {
-
-    //     let text = message.to_string();
-
-    //     self.send(text)
+    // fn send(&mut self, text: String) -> Vec<Error> {
+    //     self.clients
+    //         .iter()
+    //         .map(|mut client| client.write(text.as_bytes()))
+    //         .filter_map(|e| e.err())
+    //         .collect()
     // }
-
-    // pub fn send_chat(&mut self, chat_info: ChatInfo) -> Vec<Error> {
-
-    //     let text = chat_info.to_string();
-
-    //     self.send(text)
-    // }
-
-    fn send(&mut self, text: String) -> Vec<Error> {
-        self.clients
-            .iter()
-            .map(|mut client| client.write(text.as_bytes()))
-            .filter_map(|e| e.err())
-            .collect()
-    }
 }
