@@ -66,22 +66,16 @@ impl Messenger {
         format!("{}:{}", self.ip, self.port)
     }
 
-    pub fn send_text(&mut self, text: String) -> Vec<Error> {
-        let mut sends = vec![];
+    pub fn send_text(&mut self, text: &String) -> Vec<Error> {
+        let mut errors = vec![];
 
         for i in 0..self.clients.len() {
             let sent_result = self.clients[i].write(text.as_bytes());
 
             if sent_result.is_err() {
-                sends.push((i, sent_result.unwrap_err()));
+                self.clients.remove(i);
+                errors.push(sent_result.unwrap_err());
             }
-        }
-
-        let mut errors = vec![];
-
-        for (corrupted_index, err) in sends {
-            self.clients.remove(corrupted_index);
-            errors.push(err);
         }
 
         errors

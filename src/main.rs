@@ -2,6 +2,7 @@ mod channel;
 mod messaging;
 mod networking;
 
+use std::borrow::Borrow;
 use std::io::Read;
 use std::net::{SocketAddr, TcpStream};
 use std::sync::{Arc, Mutex};
@@ -17,6 +18,8 @@ use gtk::{
 };
 use regex::Regex;
 
+use crate::channel::chat_info;
+use crate::channel::chat_info::TypeSystem;
 use crate::networking::client;
 use channel::chat_info::{ChatInfo, TypeChat};
 use channel::chat_message::ChatMessage;
@@ -174,7 +177,7 @@ fn main() {
         let text = actual_text.clone();
 
         tx_clone_sendbutton
-            .send(WindowInfo::new_chat_message(
+            .send(WindowInfo::ChatMessage(
                 ChatMessage::new(&id_messenger, text),
                 false,
             ))
@@ -224,10 +227,14 @@ fn main() {
 
             println!("Client {} connected", text);
 
+            // TODO: Add AddClients !!sending!!
+
             clients.push(client.unwrap());
             addclient_entry.set_text("");
             addclient_label.set_text("Username added sucessfully!");
             statuslabel_clone_button.set_text(format!("{} connected", clients.len()).as_str());
+
+            // TODO: Add HostClients !!sending!!
         });
 
         let window_clone = window.clone();
@@ -247,12 +254,15 @@ fn main() {
                 let error = client.as_ref().unwrap_err().to_string();
                 println!("ERROR: {}", error);
                 tx_server_clone
-                    .send(WindowInfo::new_chat_info(
+                    .send(WindowInfo::ChatInfo(
                         ChatInfo::new(TypeChat::Error, error),
                         true,
                     ))
                     .unwrap();
             }
+
+            // TODO: Add HostClients and AddClients !!receiving!!
+            // tx_server_clone.send(WindowInfo::ChatInfo(ChatInfo::from_type_system(TypeSystem::AddClients), false)).unwrap();
 
             let client_clone = client;
             let tx_server_clone_thread = tx_server_clone.clone();
@@ -280,7 +290,7 @@ fn main() {
                 }
 
                 tx_server_clone_thread
-                    .send(WindowInfo::new_chat_message(
+                    .send(WindowInfo::ChatMessage(
                         ChatMessage::from(text.to_string()),
                         true,
                     ))
@@ -298,14 +308,18 @@ fn main() {
         let (_, mut end) = buffer.bounds();
         let mut messenger = messenger_clone_rx.borrow_mut();
 
-        if !msg.is_sent {
-            let sent = match msg.get_chat() {
-                Some(text) => messenger.send_text(text),
-                None => {
-                    println!("ERROR: message empty...");
-                    vec![]
-                }
-            };
+        // if let WindowInfo::ChatInfo(chat_info, _) = msg {
+        //     if let TypeChat::System(type_system) = chat_info.type_chat {
+        //         match type_system {
+        //             TypeSystem::AddClients =>
+        //         }
+        //     }
+        // }
+
+        let (message, is_sent) = msg.get_chat_data();
+
+        if !is_sent {
+            let sent = messenger.send_text(&message);
 
             if !sent.is_empty() {
                 for err in sent {
@@ -314,14 +328,11 @@ fn main() {
             }
         }
 
-        if let Some(message) = msg.get_chat() {
-            statuslabel_clone_rx
-                .set_text(format!("{} connected", messenger.clients.len()).as_str());
+        statuslabel_clone_rx.set_text(format!("{} connected", messenger.clients.len()).as_str());
 
-            buffer.insert_markup(&mut end, message.as_str());
+        buffer.insert_markup(&mut end, message.as_str());
 
-            textview.scroll_to_iter(&mut end, 0.0, false, 0.0, 0.0);
-        }
+        textview.scroll_to_iter(&mut end, 0.0, false, 0.0, 0.0);
 
         loaderspinner_clone.set_active(false);
 
