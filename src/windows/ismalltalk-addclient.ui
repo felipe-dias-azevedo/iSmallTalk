@@ -58,7 +58,7 @@
                 <property name="can-focus">True</property>
                 <property name="has-focus">True</property>
                 <property name="activates-default">True</property>
-                <property name="placeholder-text" translatable="yes">Type username ID</property>
+                <property name="placeholder-text" translatable="yes">Type username ID:</property>
                 <property name="input-purpose">name</property>
               </object>
               <packing>

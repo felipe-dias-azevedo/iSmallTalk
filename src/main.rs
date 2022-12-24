@@ -222,7 +222,8 @@ fn main() {
             let client = client::validate_ip(text);
 
             if let Some(client_error) = client.as_ref().err() {
-                statuslabel_clone_button.set_text(client_error.0);
+                addclient_label.set_text(client_error.0);
+                return;
             }
 
             println!("Client {} connected", text);
