@@ -33,10 +33,18 @@ impl ChatMessage {
         ChatMessage { id, text, time }
     }
 
-    pub fn to_string(&self) -> String {
+    pub fn to_send_text(&self) -> String {
         format!(
-            // "<i>{} - {}</i> : <b>{}</b>\n",
-            "{} - {} : {}\n",
+            "CM {} - {} : {}",
+            self.id,
+            self.time.format("%d/%m/%Y %T"),
+            self.text.to_owned()
+        )
+    }
+
+    pub fn to_chat_text(&self) -> String {
+        format!(
+            "<i>{} - {}</i> : <b>{}</b>\n",
             self.id,
             self.time.format("%d/%m/%Y %T"),
             self.text.to_owned()

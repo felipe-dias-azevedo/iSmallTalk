@@ -1,91 +1,52 @@
 use std::io::{Error, Write};
-use std::net::{IpAddr, TcpListener, TcpStream};
-use std::sync::{Arc, Mutex};
-
-use crate::networking::local_ip;
-use crate::networking::server;
-
-#[derive(PartialEq)]
-pub enum TypeMessenger {
-    Host,
-    Client,
-}
+use std::net::{IpAddr, TcpStream};
 
 pub struct Messenger {
-    pub type_messenger: TypeMessenger,
     pub ip: IpAddr,
     pub port: u16,
-    //pub server: TcpListener,
-    //pub server: Arc<Mutex<TcpListener>>,
-    pub clients: Vec<TcpStream>,
+    pub client: Option<TcpStream>,
 }
 
 impl Messenger {
-    fn get_type_messenger(is_host: bool) -> TypeMessenger {
-        if is_host {
-            TypeMessenger::Host
-        } else {
-            TypeMessenger::Client
+    pub fn new(ip: IpAddr, port: u16) -> Self {
+        Messenger {
+            ip,
+            port,
+            client: None,
         }
     }
 
-    pub fn new(is_host: bool) -> (Self, Arc<Mutex<TcpListener>>) {
-        let type_messenger = Messenger::get_type_messenger(is_host);
-        let ip = local_ip::get();
-        let (server, port) = server::bind_ip_port(&ip);
-
-        (
-            Messenger {
-                type_messenger,
-                ip,
-                port,
-                // server: Arc::new(Mutex::new(server)),
-                clients: Vec::new(),
-            },
-            Arc::new(Mutex::new(server)),
-        )
+    pub fn from(ip: IpAddr, port: u16, client: TcpStream) -> Self {
+        Messenger {
+            ip,
+            port,
+            client: Some(client),
+        }
     }
 
-    pub fn change_type(&mut self, is_host: bool) {
-        self.type_messenger = Messenger::get_type_messenger(is_host);
+    fn add_connection(&mut self, connection: TcpStream) {
+        self.client = Some(connection);
     }
 
-    pub fn get_chat_history(&self) -> Option<String> {
-        if self.type_messenger == TypeMessenger::Client {
+    pub fn send_message(&mut self, text: &String) -> Option<Error> {
+        if self.client.is_none() {
             return None;
         }
 
-        None
+        let mut tcp = self.client.as_ref().unwrap();
+
+        let message_sent = tcp.write(text.as_bytes());
+
+        let received_error = message_sent.err();
+
+        if received_error.is_some() {
+            self.client = None;
+        }
+
+        received_error
     }
-
-    pub fn connect() {}
-
-    pub fn add_client() {}
 
     pub fn get_id(&self) -> String {
         format!("{}:{}", self.ip, self.port)
     }
-
-    pub fn send_text(&mut self, text: &String) -> Vec<Error> {
-        let mut errors = vec![];
-
-        for i in 0..self.clients.len() {
-            let sent_result = self.clients[i].write(text.as_bytes());
-
-            if sent_result.is_err() {
-                self.clients.remove(i);
-                errors.push(sent_result.unwrap_err());
-            }
-        }
-
-        errors
-    }
-
-    // fn send(&mut self, text: String) -> Vec<Error> {
-    //     self.clients
-    //         .iter()
-    //         .map(|mut client| client.write(text.as_bytes()))
-    //         .filter_map(|e| e.err())
-    //         .collect()
-    // }
 }

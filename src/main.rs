@@ -2,12 +2,8 @@ mod channel;
 mod messaging;
 mod networking;
 
-use std::borrow::Borrow;
-use std::io::Read;
-use std::net::{SocketAddr, TcpStream};
-use std::sync::{Arc, Mutex};
+use std::io::{Read, Write};
 use std::thread;
-use std::time::Duration;
 use std::{cell::RefCell, rc::Rc};
 
 use gtk::{
@@ -16,18 +12,22 @@ use gtk::{
     glib,
     prelude::*,
 };
-use regex::Regex;
 
-use crate::channel::chat_info;
-use crate::channel::chat_info::TypeSystem;
-use crate::networking::client;
+use crate::channel::system_action::SystemAction;
+use crate::messaging::host_messenger::HostMessenger;
+use crate::networking::{client, local_ip, server};
 use channel::chat_info::{ChatInfo, TypeChat};
 use channel::chat_message::ChatMessage;
-use channel::window_info::WindowInfo;
 use messaging::messenger::Messenger;
 
 fn main() {
-    let (tx, rx) = glib::MainContext::channel::<WindowInfo>(glib::PRIORITY_DEFAULT);
+    let (tx_sys, rx_sys) = glib::MainContext::channel::<SystemAction>(glib::PRIORITY_DEFAULT);
+
+    let ip = local_ip::get();
+    let (server, port) = server::bind_ip_port(&ip);
+    let default_messenger = Messenger::new(ip, port);
+    let default_host_messenger: Option<HostMessenger> = None;
+    let default_host_messenger = Rc::new(RefCell::new(default_host_messenger));
 
     let actual_text = Rc::new(RefCell::new(String::from("")));
 
@@ -69,10 +69,12 @@ fn main() {
     let sendbutton: gtk::Button = builder
         .object("main-sendbutton")
         .expect("Couldn't get main-sendbutton");
+    sendbutton.set_sensitive(false);
 
     let entrytext: gtk::Entry = builder
         .object("main-entrytext")
         .expect("Couldn't get main-entrytext");
+    entrytext.set_sensitive(false);
 
     let leavebutton: gtk::Button = builder
         .object("main-leavebutton")
@@ -95,6 +97,7 @@ fn main() {
         .object("main-connectbutton")
         .expect("Couldn't get main-connectbutton");
     connectbutton.hide();
+    connectbutton.set_sensitive(false);
 
     let menupopover: gtk::Popover = builder
         .object("main-menupopover")
@@ -115,6 +118,7 @@ fn main() {
         aboutdialog.connect_delete_event(move |x, _| x.hide_on_delete());
     });
 
+    // TODO: read from user config file (get last used)
     let is_host = hostcheck.is_active();
     if !is_host {
         addbutton.hide();
@@ -123,25 +127,30 @@ fn main() {
     //     connectbutton.hide();
     // }
 
-    let (mess, mess_server) = Messenger::new(is_host);
-
-    let id_messenger = mess.get_id();
-    let messenger = Rc::new(RefCell::new(mess));
+    let id_messenger = default_messenger.get_id();
+    let messenger = Rc::new(RefCell::new(default_messenger));
 
     let addbutton_clone = addbutton.clone();
-    let messenger_clone = Rc::clone(&messenger);
-    hostcheck.connect_clicked(move |a| {
-        if a.is_active() {
+    let tx_sys_clone_hostcheck = tx_sys.clone();
+    hostcheck.connect_clicked(move |is_host| {
+        if is_host.is_active() {
             addbutton_clone.show();
-            // connectbutton.hide();
+            connectbutton.hide();
 
-            messenger_clone.borrow_mut().change_type(true);
-        } else {
-            addbutton_clone.hide();
-            // connectbutton.show();
+            let toggled_host = tx_sys_clone_hostcheck
+                .send(SystemAction::ToggleHost(true))
+                .ok();
 
-            messenger_clone.borrow_mut().change_type(false);
+            if toggled_host.is_some() {
+                is_host.set_sensitive(false);
+            }
         }
+        // else {
+        //     addbutton_clone.hide();
+        //     connectbutton.show();
+        //
+        //     tx_sys_clone.send(SystemAction::ToggleHost(false)).unwrap();
+        // }
     });
 
     let buffer = textview.buffer().unwrap();
@@ -165,7 +174,7 @@ fn main() {
         Inhibit(false)
     });
 
-    let tx_clone_sendbutton = tx.clone();
+    let tx_clone_sendbutton = tx_sys.clone();
     let actual_text_clone_sendbutton = Rc::clone(&actual_text);
     sendbutton.connect_clicked(move |_| {
         let mut actual_text = actual_text_clone_sendbutton.borrow_mut();
@@ -177,10 +186,10 @@ fn main() {
         let text = actual_text.clone();
 
         tx_clone_sendbutton
-            .send(WindowInfo::ChatMessage(
-                ChatMessage::new(&id_messenger, text),
-                false,
-            ))
+            .send(SystemAction::SendChatMessage(ChatMessage::new(
+                &id_messenger,
+                text,
+            ), true))
             .unwrap();
 
         // TODO: fix
@@ -188,8 +197,7 @@ fn main() {
         *actual_text = String::new();
     });
 
-    let statuslabel_clone = statuslabel.clone();
-    let messenger_clone_addclients = Rc::clone(&messenger);
+    let tx_sys_clone_addclient = tx_sys.clone();
     addbutton.connect_clicked(move |_| {
         let builder = gtk::Builder::from_file("src/windows/ismalltalk-addclient.ui");
         let new_window: gtk::Window = builder
@@ -211,11 +219,8 @@ fn main() {
         window.set_accept_focus(false);
         new_window.show_all();
 
-        let statuslabel_clone_button = statuslabel_clone.clone();
-        let messenger_clone_addclients_button = Rc::clone(&messenger_clone_addclients);
+        let tx_sys_clone_addclient_button = tx_sys_clone_addclient.clone();
         addclient_button.connect_clicked(move |_| {
-            let clients = &mut messenger_clone_addclients_button.borrow_mut().clients;
-
             let text = addclient_entry.text();
             let text = text.as_str();
 
@@ -228,14 +233,16 @@ fn main() {
 
             println!("Client {} connected", text);
 
-            // TODO: Add AddClients !!sending!!
+            let (ip, port) = client::id_to_ip_port(&text.to_string());
 
-            clients.push(client.unwrap());
-            addclient_entry.set_text("");
-            addclient_label.set_text("Username added sucessfully!");
-            statuslabel_clone_button.set_text(format!("{} connected", clients.len()).as_str());
+            let requested_add_client = tx_sys_clone_addclient_button
+                .send(SystemAction::RequestAddClient(ip, port, client.unwrap()))
+                .ok();
 
-            // TODO: Add HostClients !!sending!!
+            if requested_add_client.is_some() {
+                addclient_entry.set_text("");
+                addclient_label.set_text("Username added sucessfully!");
+            }
         });
 
         let window_clone = window.clone();
@@ -245,25 +252,19 @@ fn main() {
         });
     });
 
-    let server_clone = Arc::clone(&mess_server);
-    let tx_server_clone = tx.clone();
+    let tx_server_clone = tx_sys.clone();
     thread::spawn(move || {
-        let server = server_clone.lock().expect("Couldn't get server...");
-
         for client in server.incoming() {
             if client.is_err() {
                 let error = client.as_ref().unwrap_err().to_string();
                 println!("ERROR: {}", error);
                 tx_server_clone
-                    .send(WindowInfo::ChatInfo(
-                        ChatInfo::new(TypeChat::Error, error),
-                        true,
-                    ))
+                    .send(SystemAction::SendChatInfo(ChatInfo::new(
+                        TypeChat::Error,
+                        error,
+                    )))
                     .unwrap();
             }
-
-            // TODO: Add HostClients and AddClients !!receiving!!
-            // tx_server_clone.send(WindowInfo::ChatInfo(ChatInfo::from_type_system(TypeSystem::AddClients), false)).unwrap();
 
             let client_clone = client;
             let tx_server_clone_thread = tx_server_clone.clone();
@@ -290,52 +291,179 @@ fn main() {
                     break;
                 }
 
-                tx_server_clone_thread
-                    .send(WindowInfo::ChatMessage(
-                        ChatMessage::from(text.to_string()),
-                        true,
-                    ))
-                    .unwrap();
+                if text.starts_with("CM") {
+                    let text = text.split("CM ").last().unwrap_or("").to_string();
+                    tx_server_clone_thread
+                        .send(SystemAction::SendChatMessage(ChatMessage::from(text), false))
+                        .unwrap();
+                } else if text.starts_with("RAC") {
+                    let ip_port = text.split("RAC ").last().unwrap_or("").to_string();
+
+                    let tcp_stream = client::connect(&ip_port);
+                    let (ip, port) = client::id_to_ip_port(&ip_port);
+
+                    if let Some(client) = tcp_stream {
+                        tx_server_clone_thread
+                            .send(SystemAction::AddClient(ip, port, client))
+                            .unwrap();
+                        // TODO: Cancel request add client if error
+                    }
+                }
             });
         }
     });
 
-    let loaderspinner_clone = loaderspinner.clone();
-    let statuslabel_clone_rx = statuslabel.clone();
-    let messenger_clone_rx = Rc::clone(&messenger);
-    rx.attach(None, move |msg| {
-        loaderspinner_clone.set_active(true);
+    let loaderspinner_clone_system = loaderspinner.clone();
+    let statuslabel_clone_system = statuslabel.clone();
+    let default_messenger_clone_system = Rc::clone(&messenger);
+    let default_host_messenger_clone_system = Rc::clone(&default_host_messenger);
+    rx_sys.attach(None, move |system_action| {
+        loaderspinner_clone_system.set_active(true);
 
-        let (_, mut end) = buffer.bounds();
-        let mut messenger = messenger_clone_rx.borrow_mut();
+        match system_action {
+            SystemAction::SendChatMessage(chat_message, is_sent) => {
+                println!("signal SendChatMessage");
 
-        // if let WindowInfo::ChatInfo(chat_info, _) = msg {
-        //     if let TypeChat::System(type_system) = chat_info.type_chat {
-        //         match type_system {
-        //             TypeSystem::AddClients =>
-        //         }
-        //     }
-        // }
+                let (_, mut end) = buffer.bounds();
+                let message = chat_message.to_send_text();
 
-        let (message, is_sent) = msg.get_chat_data();
+                let mut host_messenger = default_host_messenger_clone_system.borrow_mut();
 
-        if !is_sent {
-            let sent = messenger.send_text(&message);
+                if host_messenger.is_some() {
+                    let host_messenger = host_messenger.as_mut().unwrap();
 
-            if !sent.is_empty() {
-                for err in sent {
-                    println!("ERROR: {}", err)
+                    if is_sent {
+                        let errors = host_messenger.send_message(&message);
+
+                        for err in errors {
+                            // TODO: show in dialog that error happened
+                            println!("ERROR: {}", err)
+                        }
+
+                        statuslabel_clone_system.set_text(
+                            format!("{} connected", host_messenger.get_ammount_connected()).as_str(),
+                        );
+                    } else {
+                        let errors = host_messenger.send_broadcast_message(&message, &chat_message.id);
+
+                        for err in errors {
+                            // TODO: show in dialog that error happened
+                            println!("ERROR: {}", err)
+                        }
+
+                        statuslabel_clone_system.set_text(
+                            format!("{} connected", host_messenger.get_ammount_connected()).as_str(),
+                        );
+                    }
+
+                    if host_messenger.get_ammount_connected() > 0 {
+                        buffer.insert_markup(&mut end, chat_message.to_chat_text().as_str());
+
+                        textview.scroll_to_iter(&mut end, 0.0, false, 0.0, 0.0);
+                    } else {
+                        sendbutton.set_sensitive(false);
+                        entrytext.set_sensitive(false);
+                    }
+                } else {
+                    let mut messenger = default_messenger_clone_system.borrow_mut();
+
+                    if is_sent {
+                        let error = messenger.send_message(&message);
+
+                        if let Some(err) = error {
+                            // TODO: show in dialog that error happened
+                            println!("ERROR: {}", err)
+                        }
+                    }
+
+                    if messenger.client.is_some() {
+                        buffer.insert_markup(&mut end, chat_message.to_chat_text().as_str());
+
+                        textview.scroll_to_iter(&mut end, 0.0, false, 0.0, 0.0);
+
+                        statuslabel_clone_system.set_text("Connected to host");
+                    } else {
+                        sendbutton.set_sensitive(false);
+                        entrytext.set_sensitive(false);
+
+                        statuslabel_clone_system.set_text("Not connected");
+                    }
                 }
             }
+            SystemAction::ToggleHost(is_host) => {
+                println!("signal ToggleHost");
+
+                let messenger = default_messenger_clone_system.borrow();
+                let mut host_messenger = default_host_messenger_clone_system.borrow_mut();
+
+                if is_host {
+                    *host_messenger = Some(HostMessenger::from(&*messenger));
+                    statuslabel_clone_system.set_text("0 connected");
+                } else {
+                    *host_messenger = None;
+                    statuslabel_clone_system.set_text("Connected to host");
+                }
+            }
+            SystemAction::AddClient(ip, port, client) => {
+                println!("signal AddClient");
+
+                let mut host_messenger = default_host_messenger_clone_system.borrow_mut();
+
+                if host_messenger.is_some() {
+                    let host_messenger = host_messenger.as_mut().unwrap();
+
+                    host_messenger.add_connection(ip, port, client);
+
+                    statuslabel_clone_system.set_text(
+                        format!("{} connected", host_messenger.get_ammount_connected()).as_str(),
+                    );
+                } else {
+                    let mut messenger = default_messenger_clone_system.borrow_mut();
+
+                    messenger.client = Some(client);
+
+                    statuslabel_clone_system.set_text("Connected to host");
+                }
+
+                sendbutton.set_sensitive(true);
+                entrytext.set_sensitive(true);
+            }
+            SystemAction::RequestAddClient(ip, port, mut client) => {
+                println!("signal RequestAddClient");
+
+                let mut host_messenger = default_host_messenger_clone_system.borrow_mut();
+                let mut messenger = default_messenger_clone_system.borrow_mut();
+
+                let error = client
+                    .write(format!("RAC {}", messenger.get_id()).as_bytes())
+                    .err();
+
+                if let Some(err) = error {
+                    // TODO: show in dialog that error happened
+                    println!("ERROR: {}", err)
+                }
+
+                if host_messenger.is_some() {
+                    let host_messenger = host_messenger.as_mut().unwrap();
+
+                    host_messenger.add_connection(ip, port, client);
+
+                    statuslabel_clone_system.set_text(
+                        format!("{} connected", host_messenger.get_ammount_connected()).as_str(),
+                    );
+                } else {
+                    messenger.client = Some(client);
+
+                    statuslabel_clone_system.set_text("Connected to host");
+                }
+
+                sendbutton.set_sensitive(true);
+                entrytext.set_sensitive(true);
+            }
+            _ => {}
         }
 
-        statuslabel_clone_rx.set_text(format!("{} connected", messenger.clients.len()).as_str());
-
-        buffer.insert_markup(&mut end, message.as_str());
-
-        textview.scroll_to_iter(&mut end, 0.0, false, 0.0, 0.0);
-
-        loaderspinner_clone.set_active(false);
+        loaderspinner_clone_system.set_active(false);
 
         Continue(true)
     });

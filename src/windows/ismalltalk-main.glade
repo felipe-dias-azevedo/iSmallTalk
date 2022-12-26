@@ -149,7 +149,7 @@
               <object class="GtkLabel" id="main-statuslabel">
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>
-                <property name="label" translatable="yes">0 connected</property>
+                <property name="label" translatable="yes">Not connected</property>
               </object>
               <packing>
                 <property name="expand">True</property>
