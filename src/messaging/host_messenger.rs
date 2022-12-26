@@ -1,7 +1,6 @@
 use crate::messaging::messenger::Messenger;
 use std::io::{Error, Write};
 use std::net::{IpAddr, TcpStream};
-use gtk::prelude::ListModelExtManual;
 
 pub struct HostMessenger {
     pub ip: IpAddr,
@@ -22,6 +21,19 @@ impl HostMessenger {
         let messenger = Messenger::from(ip, port, connection);
 
         self.clients.push(Some(messenger));
+    }
+
+    pub fn remove_connection(&mut self, ip_port: String) {
+        let index_option = self.clients.iter().position(|x| {
+            if let Some(y) = x {
+                return y.get_id() == ip_port;
+            }
+            false
+        });
+
+        if let Some(client_index) = index_option {
+            self.clients.remove(client_index);
+        }
     }
 
     pub fn send_message(&mut self, text: &String) -> Vec<Error> {

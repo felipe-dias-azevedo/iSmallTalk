@@ -43,8 +43,9 @@ fn main() {
 
     window.show_all();
 
-    window.connect_delete_event(|_, _| {
-        gtk::main_quit();
+    let tx_sys_clone_quit = tx_sys.clone();
+    window.connect_delete_event(move |_, _| {
+        tx_sys_clone_quit.send(SystemAction::LeaveChatAndQuit).unwrap();
         Inhibit(false)
     });
 
@@ -165,11 +166,10 @@ fn main() {
     });
 
     let sendbutton_clone = sendbutton.clone();
-    entrytext.connect_key_press_event(move |e, x| {
+    entrytext.connect_key_press_event(move |_, x| {
         let key = x.keyval();
         if key == Return || key == ISO_Enter || key == KP_Enter || key == _3270_Enter {
             sendbutton_clone.emit_clicked();
-            e.set_text("");
         }
         Inhibit(false)
     });
@@ -192,8 +192,10 @@ fn main() {
             ), true))
             .unwrap();
 
-        // TODO: fix
-        //entrytext.set_text(""); // -> ERROR 'already borrowed: BorrowMutError'
+        tx_clone_sendbutton
+            .send(SystemAction::ResetMainTextEntry)
+            .unwrap();
+
         *actual_text = String::new();
     });
 
@@ -308,6 +310,12 @@ fn main() {
                             .unwrap();
                         // TODO: Cancel request add client if error
                     }
+                } else if text.starts_with("CEC") {
+                    let ip_port = text.split("CEC ").last().unwrap_or("").to_string();
+
+                    tx_server_clone_thread
+                        .send(SystemAction::ClientExitChat(ip_port))
+                        .unwrap();
                 }
             });
         }
@@ -459,6 +467,70 @@ fn main() {
 
                 sendbutton.set_sensitive(true);
                 entrytext.set_sensitive(true);
+            }
+            SystemAction::ResetMainTextEntry => {
+                entrytext.set_text("");
+            }
+            SystemAction::LeaveChatAndQuit => {
+                println!("signal LeaveChatAndQuit");
+
+                let mut host_messenger = default_host_messenger_clone_system.borrow_mut();
+
+                if host_messenger.is_some() {
+                    let host_messenger = host_messenger.as_mut().unwrap();
+
+                    let message = format!("CEC {}", host_messenger.get_id());
+
+                    let errors = host_messenger.send_message(&message);
+
+                    for err in errors {
+                        // TODO: show in dialog that error happened
+                        println!("ERROR: {}", err)
+                    }
+                } else {
+                    let mut messenger = default_messenger_clone_system.borrow_mut();
+
+                    let message = format!("CEC {}", messenger.get_id());
+
+                    let error = messenger.send_message(&message);
+
+                    if let Some(err) = error {
+                        // TODO: show in dialog that error happened
+                        println!("ERROR: {}", err)
+                    }
+                }
+
+                gtk::main_quit();
+            }
+            SystemAction::LeaveChat => {}
+            SystemAction::ClientExitChat(ip_port) => {
+                println!("signal ClientExitChat");
+
+                let mut host_messenger = default_host_messenger_clone_system.borrow_mut();
+
+                if host_messenger.is_some() {
+                    let host_messenger = host_messenger.as_mut().unwrap();
+
+                    host_messenger.remove_connection(ip_port);
+
+                    statuslabel_clone_system.set_text(
+                        format!("{} connected", host_messenger.get_ammount_connected()).as_str(),
+                    );
+
+                    if host_messenger.get_ammount_connected() == 0 {
+                        sendbutton.set_sensitive(false);
+                        entrytext.set_sensitive(false);
+                    }
+                } else {
+                    let mut messenger = default_messenger_clone_system.borrow_mut();
+
+                    messenger.remove_connection();
+
+                    sendbutton.set_sensitive(false);
+                    entrytext.set_sensitive(false);
+
+                    statuslabel_clone_system.set_text("Not connected");
+                }
             }
             _ => {}
         }

@@ -28,6 +28,10 @@ impl Messenger {
         self.client = Some(connection);
     }
 
+    pub fn remove_connection(&mut self) {
+        self.client = None;
+    }
+
     pub fn send_message(&mut self, text: &String) -> Option<Error> {
         if self.client.is_none() {
             return None;

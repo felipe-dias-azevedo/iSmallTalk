@@ -34,8 +34,7 @@ impl ChatInfo {
         let color = match &self.type_chat {
             TypeChat::Error => String::from("#df0e0f"),
             TypeChat::Warning => String::from("#f7c02d"),
-            TypeChat::Info => String::from("#7bafe9"),
-            _ => String::from(""),
+            TypeChat::Info => String::from("#7bafe9")
         };
 
         format!(
