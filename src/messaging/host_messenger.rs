@@ -56,23 +56,24 @@ impl HostMessenger {
         errors
     }
 
-    pub fn send_broadcast_message(&mut self, text: &String, filter: &String) -> Vec<Error> {
+    pub fn send_broadcast_message(&mut self, text: &String, id_filter: &String) -> Vec<Error> {
         let mut errors = vec![];
 
         for i in 0..self.clients.len() {
-
             let client_option = &self.clients[i].as_ref().unwrap();
 
-            if &client_option.get_id() != filter {
-                let client = &client_option.client;
-                let mut client = client.as_ref().unwrap();
+            if &client_option.get_id() == id_filter {
+                continue;
+            }
 
-                let message_sent = client.write(text.as_bytes());
+            let client = &client_option.client;
+            let mut client = client.as_ref().unwrap();
 
-                if message_sent.is_err() {
-                    self.clients.remove(i);
-                    errors.push(message_sent.unwrap_err());
-                }
+            let message_sent = client.write(text.as_bytes());
+
+            if message_sent.is_err() {
+                self.clients.remove(i);
+                errors.push(message_sent.unwrap_err());
             }
         }
 

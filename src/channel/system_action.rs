@@ -7,9 +7,9 @@ pub enum SystemAction {
     LeaveChatAndQuit,
     ClientExitChat(String),
     SendChatMessage(ChatMessage, bool),
-    SendChatInfo(ChatInfo),
+    SendChatInfo(ChatInfo, bool),
     ToggleHost(bool),
     RequestAddClient(IpAddr, u16, TcpStream),
     AddClient(IpAddr, u16, TcpStream),
-    ResetMainTextEntry
+    ResetMainTextEntry,
 }
