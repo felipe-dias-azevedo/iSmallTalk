@@ -1,7 +1,7 @@
 [package]
-name = "iSmallTalk"
+name = "ismalltalk"
 version = "1.0.0"
-edition = "2022"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -9,3 +9,6 @@ edition = "2022"
 chrono = "0.4.23"
 gtk = "0.16.2"
 rand = "0.8.5"
+regex = "1.7.0"
+strum = "0.24.1"
+strum_macros = "0.24.3"
