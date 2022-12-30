@@ -10,11 +10,11 @@ Implementation of the Star Network Topology with TCP sockets.
 ### Examples
 [todo]
 
-### Instalation
+### Installation
 
 You must have Rust, Cargo and GTK installed to compile and run it.
 
-###### Tested only on Linux. But should work with Windows and MacOS as long as GTK is installed and configured correctly.
+Tested on Linux and Windows. But should work also with macOS as long as GTK is installed and configured correctly.
 
 ```
 cargo build --release
@@ -32,10 +32,10 @@ cargo build --release
 * loader to init app
 * Chat history
 * IP Address Obfuscation Algorithm to ID 
-* Notification as message is received]
+* Notification as message is received
 * Turn off host function
 * Build/Install script to configure .desktop file and glade files to output dir
-* Appimage deploy
+* AppImage deploy
 
 ##### v2
 * store config file

@@ -1,5 +1,5 @@
-use std::str::FromStr;
 use chrono::{DateTime, Local, NaiveDateTime, TimeZone};
+use std::str::FromStr;
 use strum_macros::{Display, EnumString};
 
 #[derive(Eq, PartialEq, EnumString, Display)]
@@ -43,7 +43,12 @@ impl ChatInfo {
             NaiveDateTime::parse_from_str(time_string, "%d/%m/%Y %T").unwrap_or_default();
         let time = Local.from_local_datetime(&time_datetime).unwrap();
 
-        ChatInfo { id, type_chat, text, time }
+        ChatInfo {
+            id,
+            type_chat,
+            text,
+            time,
+        }
     }
 
     pub fn to_send_text(&self) -> String {

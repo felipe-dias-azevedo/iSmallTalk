@@ -17,7 +17,8 @@ impl ChatMessage {
 
     pub fn from(chat_message: String) -> Self {
         let texts = chat_message.split(':').collect::<Vec<&str>>();
-        let text = texts.get(4).unwrap_or(&"").trim().to_string();
+
+        let text = texts[4..].join(":").trim().to_string();
 
         let texts = texts[..4].join(":");
 
