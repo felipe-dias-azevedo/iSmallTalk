@@ -52,6 +52,6 @@ fn main() {
     let _ = listener_thread::start(&id_messenger, &tx_sys, server);
 
     receiver_thread::start(rx_sys, &main_window, &messenger, &default_host_messenger);
-
-    gtk::main();
+    
+    app.start();
 }
