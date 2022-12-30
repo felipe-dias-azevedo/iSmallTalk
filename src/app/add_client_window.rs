@@ -3,6 +3,8 @@ use crate::networking::client;
 use gtk::glib::{clone, Sender};
 use gtk::prelude::*;
 
+const ADD_CLIENT_WINDOW: &'static str = include_str!("./templates/ismalltalk-addclient.glade");
+
 pub struct AddClientWindow {
     window: gtk::Window,
     addclient_entry: gtk::Entry,
@@ -12,7 +14,7 @@ pub struct AddClientWindow {
 
 impl AddClientWindow {
     pub fn new(main_window: &gtk::Window, sender: &Sender<SystemAction>) -> Self {
-        let builder = gtk::Builder::from_file("templates/ismalltalk-addclient.glade");
+        let builder = gtk::Builder::from_string(ADD_CLIENT_WINDOW);
 
         let add_client_window = AddClientWindow {
             window: builder
@@ -37,7 +39,7 @@ impl AddClientWindow {
         add_client_window
     }
 
-    pub fn on_add_client_clicked(&self, sender: &Sender<SystemAction>) {
+    fn on_add_client_clicked(&self, sender: &Sender<SystemAction>) {
         self.addclient_button.connect_clicked(clone!(
             @strong self.addclient_entry as addclient_entry,
             @strong self.addclient_label as addclient_label

@@ -15,7 +15,13 @@ use crate::messaging::host_messenger::HostMessenger;
 use crate::networking::{local_ip, server};
 use messaging::messenger::Messenger;
 
+const MAIN_WINDOW: &'static str = include_str!("app/templates/ismalltalk-main.glade");
+
 fn main() {
+    gtk::init().expect("GTK failed");
+
+    let app = MainApplication::new();
+
     let (tx_sys, rx_sys) = glib::MainContext::channel::<SystemAction>(glib::PRIORITY_DEFAULT);
 
     let ip = local_ip::get();
@@ -30,12 +36,7 @@ fn main() {
 
     let actual_text = Rc::new(RefCell::new(String::from("")));
 
-    gtk::init().expect("GTK failed");
-
-    let app = MainApplication::new();
-
-    let builder_main_window = gtk::Builder::from_file("templates/ismalltalk-main.glade");
-
+    let builder_main_window = gtk::Builder::from_string(MAIN_WINDOW);
     let main_window = MainWindow::new(&builder_main_window, &id_messenger);
 
     app.on_activate(&main_window);

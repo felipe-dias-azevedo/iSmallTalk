@@ -203,7 +203,7 @@ pub fn start(
                         }
                     }
 
-                    gtk::main_quit();
+                    // gtk::main_quit();
                 }
                 SystemAction::LeaveChat => {}
                 SystemAction::ClientExitChat(ip_port) => {

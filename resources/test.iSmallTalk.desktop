@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=iSmallTalk
+Comment=P2P Chat App built in Rust with GTK3 GUI
+Exec=/home/felipe/github/iSmallTalk/target/release/ismalltalk
+#Icon=com.felipe.iSmallTalk
+Terminal=false
+Type=Application
+Categories=GNOME;GTK;Utility;
+StartupNotify=true
+#DBusActivatable=true
+X-GNOME-UsesNotifications=true

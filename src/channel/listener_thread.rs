@@ -14,7 +14,6 @@ pub fn start(id: &String, sender: &Sender<SystemAction>, server: TcpListener) ->
     thread::spawn(clone!(
         @strong id,
         @strong sender,
-        // @strong server
         => move || {
             for client in server.incoming() {
                 if client.is_err() {
@@ -34,7 +33,6 @@ pub fn start(id: &String, sender: &Sender<SystemAction>, server: TcpListener) ->
 
                 thread::spawn(clone!(
                     @strong id,
-                    // @strong client_clone,
                     @strong sender,
                     => move || loop {
                         let mut stream = client.as_ref().unwrap();
